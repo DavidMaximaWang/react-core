@@ -1,7 +1,9 @@
 import { scheduleCallback } from 'scheduler';
 import { createWorkInProgress } from './ReactFiber';
 import { beginWork } from './ReactFiberBeginWork.js';
+import { commitMutationEffectsOnFiber } from './ReactFiberCommitWork';
 import { completeWork } from './ReactFiberCompleteWork.js';
+import { MutationMask, NoFlags } from './ReactFiberFlags';
 
 let workInProgress = null;
 
@@ -18,12 +20,24 @@ function performConcurrentWorkOnRoot(root) {
     renderRootSync(root);
     const finishedWork = root.current.alternate;
     root.finishedWork = finishedWork;
-    // commitRoot(root);
+    commitRoot(root);
 }
 
 function renderRootSync(root) {
     prepareFreshStack(root);
     workLoopSync();
+}
+
+function commitRoot(root) {
+      const { finishedWork } = root;
+      const subtreeHasEffects = (finishedWork.subtreeFlags & MutationMask) !== NoFlags;
+      const rootHasEffect = (finishedWork.flags & MutationMask) !== NoFlags;
+
+      if (subtreeHasEffects || rootHasEffect) {
+          commitMutationEffectsOnFiber(finishedWork, root);
+      }
+
+      root.current = finishedWork;
 }
 
 function prepareFreshStack(root) {
@@ -52,7 +66,7 @@ function completeUnitOfWork(unitOfWork) {
     let completedWork = unitOfWork;
     do {
         const current = completedWork.alternate;
-        const returnFiber = completedWork;
+        const returnFiber = completedWork.return;
         completeWork(current, completedWork);
 
         const siblingFiber = completedWork.sibling;
